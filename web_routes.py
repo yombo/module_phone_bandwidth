@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks
 from yombo.core.exceptions import YomboWarning
 from yombo.lib.webinterface.routes.api_v1.__init__ import return_good, return_not_found, return_error, return_unauthorized
 from yombo.core.log import get_logger
-from yombo.lib.webinterface.auth import require_auth
+from yombo.lib.webinterface.auth import require_auth, run_first
 
 logger = get_logger("modules.phone_bandwidth.web_routes")
 
@@ -59,22 +59,27 @@ def module_phone_bandwidth_routes(webapp):
             if 'json_output' in request.args:
                 json_output = request.args.get('json_output', [{}])[0]
                 json_output = json.loads(json_output)
-                # print("json_out: %s" % json_output)
-                allowed = []
-                for device_id, value in json_output.items():
-                    if value == '1':
-                        if device_id.startswith("devid_"):
-                            parts = device_id.split('_')
-                            device_id = parts[1]
-                            if device_id in phone_bandwidth._Devices:
-                                allowed.append(parts[1])
+                print("json_out: %s" % json_output)
+                if 'active_phones' not in phone_bandwidth.node.data:
+                    phone_bandwidth.node.data['active_phones'] = {}
 
-                if 'devices' not in phone_bandwidth.node.data:
-                    phone_bandwidth.node.data['devices'] = {}
-                # if 'allowed' not in phone_bandwidth.node.data:
-                #     phone_bandwidth.node.data['devices']['allowed'] = {}
-                phone_bandwidth.node.data['devices']['allowed'] = allowed
-                phone_bandwidth.discovery(save=False)
+                for device_id, values in json_output['phones'].items():
+                    print("%s values: %s" % (device_id, values))
+                    phone = {
+                        'send': 0,
+                        'receive': 0,
+                        'pin': '',
+                    }
+                    if 'send' in values and str(values['send']) == '1':
+                        phone['send'] = 1
+                    if 'receive' in values and str(values['receive']) == '1':
+                        phone['receive'] = 1
+                    if 'pin' in values:
+                        phone['pin'] = values['pin']
+
+                phone_bandwidth.node.data['active_phones'][device_id] = phone
+                webinterface.add_alert('Bandwidth phones saved.')
+                phone_bandwidth.node.save()
 
             page = webinterface.webapp.templates.get_template('modules/phone_bandwidth/web/index.html')
             root_breadcrumb(webinterface, request)
@@ -86,17 +91,19 @@ def module_phone_bandwidth_routes(webapp):
 
     with webapp.subroute("/api/v1/extended") as webapp:
 
-        @webapp.route("/phonebandwidth/control", methods=['POST'])
-        @require_auth(api=True)
-        @inlineCallbacks
-        def page_module_phone_bandwidth_control_post(webinterface, request, session):
+        @webapp.route("/phonebandwidth/<string:apiauth>/sms", methods=['POST'])
+        @run_first()
+        def page_module_phone_bandwidth_control_post(webinterface, request, session, apiauth):
             phonemodule = webinterface._Modules['Phone']
             phone_bandwidth = webinterface._Modules['Phone_Bandwidth']
+            print("got apiauth: %s" % apiauth)
+            if apiauth != phone_bandwidth.apiauth.auth_id:
+                return return_error(request, message="invalid API Auth", code=400)
+
             try:
                 data = json.loads(request.content.read())
             except:
-                return return_error(message="invalid JSON sent", code=400)
-
-            enc = yield webinterface._GPG.encrypt(data['request'])
-            results = "testing: %s" % enc
+                return return_error(request, message="invalid JSON sent", code=400)
+            results = "PHONE Bandwidth incoming request: %s" % data
+            print(results)
             return results

@@ -2,15 +2,21 @@ Summary
 =======
 
 The primary repository link: https://github.com/yombo/module-phone-bandwidth
+Additional details about this module can be found at: https://yombo.net/modules/phone_bandwidth
 
 This module can route notifications to SMS using https://bandwidth.com
 to deliver to any cell phone. 
 
+This module requires the phone module to be installed as well:
+https://yombo.net/modules/phone
+
 Usage
 =====
 
+This module can only be used on the primary/master node of a cluster.
+
 This module extends the capabilities of the [Yombo Gateway](https://yombo.net/)
-by adding notification receivers to the Yombo Gateway.
+by routing notification targets to phones.
 
 Installation
 ============
